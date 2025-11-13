@@ -1,48 +1,46 @@
 """
-Database Schemas
+Database Schemas for LooksMax (healthy, habit-based appearance improvement)
 
-Define your MongoDB collection schemas here using Pydantic models.
-These schemas are used for data validation in your application.
-
-Each Pydantic model represents a collection in your database.
-Model name is converted to lowercase for the collection name:
-- User -> "user" collection
-- Product -> "product" collection
-- BlogPost -> "blogs" collection
+Each Pydantic model name maps to a MongoDB collection using the lowercased
+class name (handled by the helper functions that accept explicit collection names).
 """
 
 from pydantic import BaseModel, Field
-from typing import Optional
+from typing import Optional, List
 
-# Example schemas (replace with your own):
-
-class User(BaseModel):
+class Userprofile(BaseModel):
     """
-    Users collection schema
-    Collection name: "user" (lowercase of class name)
+    Collection: "userprofile"
+    Stores lightweight preferences to tailor recommendations.
     """
-    name: str = Field(..., description="Full name")
-    email: str = Field(..., description="Email address")
-    address: str = Field(..., description="Address")
-    age: Optional[int] = Field(None, ge=0, le=120, description="Age in years")
-    is_active: bool = Field(True, description="Whether user is active")
+    name: Optional[str] = Field(None, description="Display name (optional)")
+    email: Optional[str] = Field(None, description="Email (optional, no auth)")
+    skin_type: Optional[str] = Field(
+        None, description="Skin type such as normal, oily, dry, combination, sensitive"
+    )
+    hair_type: Optional[str] = Field(
+        None, description="Hair type such as straight, wavy, curly, coily"
+    )
+    style_vibe: Optional[str] = Field(
+        None, description="Style preference such as classic, streetwear, minimal, preppy"
+    )
 
-class Product(BaseModel):
+class Routine(BaseModel):
     """
-    Products collection schema
-    Collection name: "product" (lowercase of class name)
+    Collection: "routine"
+    A named routine consisting of simple steps a user can follow.
     """
-    title: str = Field(..., description="Product title")
-    description: Optional[str] = Field(None, description="Product description")
-    price: float = Field(..., ge=0, description="Price in dollars")
-    category: str = Field(..., description="Product category")
-    in_stock: bool = Field(True, description="Whether product is in stock")
+    title: str = Field(..., description="Routine name, e.g., Morning Skincare")
+    steps: List[str] = Field(default_factory=list, description="Ordered steps")
+    category: str = Field(..., description="skin | hair | style | fitness | sleep | confidence")
+    owner_email: Optional[str] = Field(None, description="Optional owner email for grouping")
 
-# Add your own schemas here:
-# --------------------------------------------------
-
-# Note: The Flames database viewer will automatically:
-# 1. Read these schemas from GET /schema endpoint
-# 2. Use them for document validation when creating/editing
-# 3. Handle all database operations (CRUD) directly
-# 4. You don't need to create any database endpoints!
+class Tip(BaseModel):
+    """
+    Collection: "tip"
+    Simple, positive, evidence-based suggestions.
+    """
+    category: str = Field(..., description="skin | hair | style | fitness | sleep | confidence")
+    title: str
+    body: str
+    tags: List[str] = Field(default_factory=list)
