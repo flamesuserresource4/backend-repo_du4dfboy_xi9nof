@@ -1,6 +1,7 @@
 import os
 from fastapi import FastAPI, HTTPException, UploadFile, File
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.responses import HTMLResponse
 from pydantic import BaseModel
 from typing import List, Optional
 
@@ -334,6 +335,173 @@ async def analyze_face(file: UploadFile = File(...)):
         raise
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Analysis failed: {str(e)[:120]}")
+
+# ------------------------
+# Lightweight built-in UI (alt deployment)
+# ------------------------
+@app.get("/ui", response_class=HTMLResponse)
+def lightweight_ui():
+    # Single-file UI that calls the same-origin API endpoints
+    html = """
+    <!doctype html>
+    <html>
+      <head>
+        <meta charset=\"utf-8\" />
+        <meta name=\"viewport\" content=\"width=device-width,initial-scale=1\" />
+        <title>LooksMax (Lite UI)</title>
+        <style>
+          body{font-family: system-ui, -apple-system, Segoe UI, Roboto, Helvetica, Arial, sans-serif; margin:0; background:#0b1220; color:#eef2ff}
+          .wrap{max-width:960px;margin:0 auto;padding:24px}
+          .card{background:rgba(255,255,255,0.06);border:1px solid rgba(255,255,255,0.12);border-radius:12px;padding:16px;margin-top:16px}
+          label{display:block;font-size:12px;color:#cbd5e1;margin:6px 0}
+          input, textarea, select{width:100%;padding:8px 10px;border-radius:8px;border:1px solid rgba(255,255,255,0.15);background:rgba(255,255,255,0.08);color:#fff}
+          button{background:#38bdf8;color:#082f49;border:0;border-radius:8px;padding:10px 14px;font-weight:600;cursor:pointer}
+          button:disabled{opacity:0.6;cursor:not-allowed}
+          .grid{display:grid;gap:12px}
+          .row{display:flex;gap:8px;flex-wrap:wrap}
+          small{color:#94a3b8}
+          .pill{display:inline-block;border:1px solid rgba(255,255,255,0.15);padding:2px 8px;border-radius:999px;margin:2px;font-size:12px;color:#e2e8f0}
+          img{max-height:220px;border-radius:10px;border:1px solid rgba(255,255,255,0.12)}
+          pre{white-space:pre-wrap;background:rgba(15,23,42,0.7);padding:8px;border-radius:8px}
+        </style>
+      </head>
+      <body>
+        <div class=\"wrap\">
+          <h1>LooksMax (Lite UI)</h1>
+          <p><small>Single-page fallback hosted by the API. Uses same-origin requests.</small></p>
+
+          <div class=\"card\">
+            <h3>System Check</h3>
+            <div id=\"status\">Checking...</div>
+          </div>
+
+          <div class=\"card\">
+            <h3>Quick Profile</h3>
+            <div class=\"grid\">
+              <div><label>Name</label><input id=\"name\" placeholder=\"Optional\" /></div>
+              <div><label>Email</label><input id=\"email\" placeholder=\"name@example.com\" /></div>
+              <div><label>Skin type</label>
+                <select id=\"skin\"><option></option><option>normal</option><option>oily</option><option>dry</option><option>combination</option><option>sensitive</option></select>
+              </div>
+              <div><label>Hair type</label>
+                <select id=\"hair\"><option></option><option>straight</option><option>wavy</option><option>curly</option><option>coily</option></select>
+              </div>
+              <div><label>Style vibe</label>
+                <select id=\"vibe\"><option></option><option>classic</option><option>minimal</option><option>streetwear</option><option>preppy</option><option>sporty</option></select>
+              </div>
+              <div class=\"row\"><button id=\"save\">Save Profile</button><div id=\"pstatus\"></div></div>
+            </div>
+          </div>
+
+          <div class=\"card\">
+            <h3>Routines</h3>
+            <div class=\"row\">
+              <select id=\"cat\">
+                <option value=\"skin\">Skin</option>
+                <option value=\"hair\">Hair</option>
+                <option value=\"style\">Style</option>
+                <option value=\"fitness\">Fitness</option>
+                <option value=\"sleep\">Sleep</option>
+                <option value=\"confidence\">Confidence</option>
+              </select>
+              <button id=\"refresh\">Refresh</button>
+            </div>
+            <div id=\"routines\" style=\"margin-top:6px\"></div>
+            <div class=\"grid\" style=\"margin-top:8px\">
+              <input id=\"rtitle\" placeholder=\"Routine title\" />
+              <textarea id=\"rsteps\" placeholder=\"One step per line\" rows=\"4\"></textarea>
+              <button id=\"addRoutine\">Create routine</button>
+            </div>
+          </div>
+
+          <div class=\"card\">
+            <h3>Face Analysis</h3>
+            <input type=\"file\" id=\"file\" accept=\"image/*\" />
+            <div class=\"row\" style=\"margin-top:8px\"><button id=\"analyze\">Analyze Photo</button><div id=\"anstatus\"></div></div>
+            <div id=\"preview\" style=\"margin-top:8px\"></div>
+            <pre id=\"analysis\" style=\"margin-top:8px\"></pre>
+          </div>
+        </div>
+        <script>
+          const qs = (s)=>document.querySelector(s);
+          const statusEl = qs('#status');
+          fetch('/')
+            .then(r=>r.json()).then(d=>{statusEl.textContent = 'Backend: ' + (d.message || 'OK');})
+            .then(()=>fetch('/test')).then(r=>r.json()).then(d=>{statusEl.textContent += ' | DB: ' + (d.database || 'n/a');})
+            .catch(e=>{statusEl.textContent='Check failed: '+e.message});
+
+          qs('#save').onclick = async ()=>{
+            const body = {
+              name: qs('#name').value,
+              email: qs('#email').value,
+              skin_type: qs('#skin').value,
+              hair_type: qs('#hair').value,
+              style_vibe: qs('#vibe').value,
+            };
+            qs('#pstatus').textContent = 'Saving...';
+            try {
+              const res = await fetch('/api/profile',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(body)});
+              const data = await res.json();
+              qs('#pstatus').textContent = res.ok ? 'Saved ✓' : (data.detail||'Failed');
+            } catch(e){ qs('#pstatus').textContent = 'Error: '+e.message }
+          };
+
+          async function loadRoutines(){
+            const cat = qs('#cat').value;
+            const res = await fetch('/api/routines?category='+encodeURIComponent(cat));
+            const arr = await res.json();
+            const wrap = qs('#routines');
+            wrap.innerHTML = '';
+            (Array.isArray(arr)?arr:[]).forEach(r=>{
+              const div = document.createElement('div');
+              div.className='pill';
+              div.textContent = r.title || 'Untitled';
+              wrap.appendChild(div);
+            })
+          }
+          qs('#refresh').onclick = loadRoutines;
+          loadRoutines();
+
+          qs('#addRoutine').onclick = async ()=>{
+            const title = qs('#rtitle').value.trim();
+            const stepsText = qs('#rsteps').value;
+            if(!title) return;
+            const steps = stepsText.split('\n').map(s=>s.trim()).filter(Boolean);
+            const cat = qs('#cat').value;
+            await fetch('/api/routines',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({title,steps,category:cat})});
+            qs('#rtitle').value=''; qs('#rsteps').value='';
+            loadRoutines();
+          };
+
+          const fileInput = qs('#file');
+          fileInput.addEventListener('change',()=>{
+            const f = fileInput.files && fileInput.files[0];
+            const p = qs('#preview');
+            p.innerHTML='';
+            if(f){
+              const url = URL.createObjectURL(f);
+              const img = document.createElement('img');
+              img.src = url; p.appendChild(img);
+            }
+          });
+
+          qs('#analyze').onclick = async ()=>{
+            const f = fileInput.files && fileInput.files[0];
+            if(!f){ qs('#anstatus').textContent='Choose a photo first'; return; }
+            qs('#anstatus').textContent='Analyzing...';
+            const fd = new FormData(); fd.append('file', f);
+            try {
+              const res = await fetch('/api/face/analyze',{method:'POST', body: fd});
+              const data = await res.json();
+              qs('#anstatus').textContent = res.ok ? 'Done' : (data.detail||'Failed');
+              qs('#analysis').textContent = JSON.stringify(data, null, 2);
+            } catch(e){ qs('#anstatus').textContent = 'Error: '+e.message }
+          };
+        </script>
+      </body>
+    </html>
+    """
+    return HTMLResponse(content=html)
 
 if __name__ == "__main__":
     import uvicorn
